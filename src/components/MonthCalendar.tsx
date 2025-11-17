@@ -108,9 +108,21 @@ export default function MonthCalendar({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <button onClick={() => setCursor(new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() - 1, 1)))} className="rounded border px-2 py-1 text-sm">Prev</button>
+        <button 
+          type="button"
+          onClick={() => setCursor(new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() - 1, 1)))} 
+          className="rounded border px-2 py-1 text-sm"
+        >
+          Prev
+        </button>
         <div className="text-sm font-medium">{cursor.toLocaleString(undefined, { month: "long", year: "numeric" })}</div>
-        <button onClick={() => setCursor(new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1)))} className="rounded border px-2 py-1 text-sm">Next</button>
+        <button 
+          type="button"
+          onClick={() => setCursor(new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1)))} 
+          className="rounded border px-2 py-1 text-sm"
+        >
+          Next
+        </button>
       </div>
       <div className="grid grid-cols-7 gap-1 text-xs">
         {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((w) => (

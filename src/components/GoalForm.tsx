@@ -4,6 +4,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import MonthCalendar from "@/components/MonthCalendar";
 import { buildSchedule, type ScheduledSession } from "@/lib/schedule";
+import SessionInfoModal from "@/components/SessionInfoModal";
 
 type GoalType = "5k" | "10k" | "half" | "marathon";
 
@@ -54,6 +55,7 @@ export default function GoalForm({ onFinished, existingPlan }: GoalFormProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [previewPlan, setPreviewPlan] = useState<any | null>(null);
   const [previewSchedule, setPreviewSchedule] = useState<ScheduledSession[] | null>(null);
+  const [selectedSession, setSelectedSession] = useState<ScheduledSession | null>(null);
 
   function toggleDay(dayValue: number) {
     setSelectedDays((prev) => (prev.includes(dayValue) ? prev.filter((d) => d !== dayValue) : [...prev, dayValue].sort()));
@@ -355,11 +357,22 @@ export default function GoalForm({ onFinished, existingPlan }: GoalFormProps) {
             {previewPlan.meta?.plan_description || "Planen er genereret og klar til brug."}
           </div>
           <div className="text-sm font-medium mb-2">Kalenderoversigt</div>
-          <MonthCalendar schedule={previewSchedule || []} onMove={() => {}} />
+          <MonthCalendar 
+            schedule={previewSchedule || []} 
+            onMove={() => {}} 
+            onSessionClick={(session) => setSelectedSession(session)}
+          />
           <div className="pt-2 text-xs text-zinc-600 dark:text-zinc-400">
             Efter du har gemt planen, kan du se den fulde oversigt på planoversigten.
           </div>
         </div>
+      )}
+
+      {selectedSession && (
+        <SessionInfoModal
+          session={selectedSession}
+          onClose={() => setSelectedSession(null)}
+        />
       )}
     </form>
   );
