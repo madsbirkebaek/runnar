@@ -8,6 +8,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const {
+    plan_id,
     start_date,
     end_date,
     plan_title,
@@ -20,16 +21,12 @@ export async function POST(req: NextRequest) {
     data,
   } = body || {};
 
-  if (!start_date || !data) {
+  if (!plan_id || !start_date || !data) {
     return NextResponse.json({ error: "missing_fields" }, { status: 400 });
   }
 
-  // Deactivate all other plans for this user first
-  await supabase.from("plans").update({ is_active: false }).eq("user_id", userId);
-
-  // Insert new plan as active
-  const { error } = await supabase.from("plans").insert({
-    user_id: userId,
+  // Update existing plan
+  const { error } = await supabase.from("plans").update({
     start_date,
     end_date: end_date || null,
     plan_title,
@@ -40,10 +37,10 @@ export async function POST(req: NextRequest) {
     target_time_sec,
     target_pace_sec,
     data,
-    is_active: true,
-    active_at: new Date().toISOString(),
-  });
+  }).eq("id", plan_id).eq("user_id", userId);
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });
 }
+

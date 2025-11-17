@@ -1,61 +1,82 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import MonthCalendar from "@/components/MonthCalendar";
 import { buildSchedule, type ScheduledSession } from "@/lib/schedule";
 
-type GoalType = "5k" | "10k" | "half" | "marathon" | "custom";
+type GoalType = "5k" | "10k" | "half" | "marathon";
 
-export default function GoalForm({ onFinished }: { onFinished?: () => void }) {
-  const [goalType, setGoalType] = useState<GoalType>("5k");
-  const [targetDate, setTargetDate] = useState("");
-  const [startDate, setStartDate] = useState<string>(new Date().toISOString().slice(0, 10));
-  const [targetType, setTargetType] = useState<"time" | "pace">("time");
-  const [targetTime, setTargetTime] = useState("");
-  const [targetPace, setTargetPace] = useState("");
-  const [weeklyDays, setWeeklyDays] = useState(4);
-  const [weeklyTimeMin, setWeeklyTimeMin] = useState<number | "">(180);
-  const [historyAvgKm, setHistoryAvgKm] = useState<number | "">(0);
-  const [historyWeeks, setHistoryWeeks] = useState<number | "">(6);
-  const [pr5k, setPr5k] = useState("");
-  const [pr10k, setPr10k] = useState("");
-  const [prHalf, setPrHalf] = useState("");
-  const [prMarathon, setPrMarathon] = useState("");
-  const [injuries, setInjuries] = useState("");
-  const [preferences, setPreferences] = useState("");
-  const [units, setUnits] = useState<"metric">("metric");
-  const [useData, setUseData] = useState(true);
+const weekdays = [
+  { label: "Mandag", value: 0 },
+  { label: "Tirsdag", value: 1 },
+  { label: "Onsdag", value: 2 },
+  { label: "Torsdag", value: 3 },
+  { label: "Fredag", value: 4 },
+  { label: "Lørdag", value: 5 },
+  { label: "Søndag", value: 6 },
+];
+
+type GoalFormProps = {
+  onFinished?: () => void;
+  existingPlan?: {
+    id?: string;
+    goalType?: GoalType;
+    startDate?: string;
+    endDate?: string;
+    selectedDays?: number[];
+    targetType?: "time" | "pace";
+    targetTime?: string;
+    targetPace?: string;
+  };
+};
+
+export default function GoalForm({ onFinished, existingPlan }: GoalFormProps) {
+  const parseTimeToString = (sec?: number | null) => {
+    if (sec == null) return "";
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = Math.floor(sec % 60);
+    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  };
+
+  const [planId, setPlanId] = useState<string | undefined>(existingPlan?.id);
+  const [goalType, setGoalType] = useState<GoalType>(existingPlan?.goalType || "5k");
+  const [startDate, setStartDate] = useState<string>(existingPlan?.startDate || new Date().toISOString().slice(0, 10));
+  const [endDate, setEndDate] = useState<string>(existingPlan?.endDate || "");
+  const [selectedDays, setSelectedDays] = useState<number[]>(existingPlan?.selectedDays || [0, 1, 3, 5]);
+  const [targetType, setTargetType] = useState<"time" | "pace">(existingPlan?.targetType || "time");
+  const [targetTime, setTargetTime] = useState<string>(existingPlan?.targetTime || "");
+  const [targetPace, setTargetPace] = useState<string>(existingPlan?.targetPace || "");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [previewPlan, setPreviewPlan] = useState<any | null>(null);
   const [previewSchedule, setPreviewSchedule] = useState<ScheduledSession[] | null>(null);
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem("rc_onboarding");
-      if (raw) {
-        const v = JSON.parse(raw);
-        if (v.distance) setGoalType(v.distance);
-        if (v.targetType) setTargetType(v.targetType);
-        if (v.targetTime) setTargetTime(v.targetTime);
-        if (v.targetPace) setTargetPace(v.targetPace);
-        if (v.weeklyDays) setWeeklyDays(v.weeklyDays);
-        if (v.weeklyTimeMin) setWeeklyTimeMin(v.weeklyTimeMin);
-        if (v.prs) {
-          setPr5k(v.prs.pr5k || "");
-          setPr10k(v.prs.pr10k || "");
-          setPrHalf(v.prs.prHalf || "");
-          setPrMarathon(v.prs.prMarathon || "");
-        }
-        if (v.injuries) setInjuries(v.injuries);
-        if (v.preferences) setPreferences(v.preferences);
-      }
-    } catch {}
-  }, []);
+
+  function toggleDay(dayValue: number) {
+    setSelectedDays((prev) => (prev.includes(dayValue) ? prev.filter((d) => d !== dayValue) : [...prev, dayValue].sort()));
+  }
 
   async function createPlan(e: React.FormEvent) {
     e.preventDefault();
+    if (selectedDays.length === 0) {
+      setErrorMsg("Vælg mindst én dag at løbe på");
+      return;
+    }
+    if (targetType === "time" && !targetTime) {
+      setErrorMsg("Indtast måltid");
+      return;
+    }
+    if (targetType === "pace" && !targetPace) {
+      setErrorMsg("Indtast gennemsnitlig pace");
+      return;
+    }
+    if (endDate && startDate && endDate < startDate) {
+      setErrorMsg("Slutdato skal være efter startdato");
+      return;
+    }
     setLoading(true);
     setErrorMsg(null);
     setPreviewPlan(null);
@@ -66,20 +87,12 @@ export default function GoalForm({ onFinished }: { onFinished?: () => void }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           goalType,
-          targetDate,
           startDate,
+          endDate,
+          selectedDays,
           targetType,
           targetTime,
           targetPace,
-          weeklyDays,
-          weeklyTimeMin,
-          historyAvgKm,
-          historyWeeks,
-          prs: { pr5k, pr10k, prHalf, prMarathon },
-          injuries,
-          preferences,
-          units,
-          useData,
         }),
       });
       const data = await res.json();
@@ -111,17 +124,27 @@ export default function GoalForm({ onFinished }: { onFinished?: () => void }) {
       if (generated) {
         const fullPlan = generated;
         setPreviewPlan(fullPlan);
-        // Build preview schedule using user day_map if available
-        const { data: userRes } = await supabase.auth.getUser();
-        const userId = userRes.user?.id;
-        let dayMapLocal: any = null;
-        if (userId) {
-          const { data: settingsRows } = await supabase.from("settings").select("day_map").eq("user_id", userId).limit(1);
-          dayMapLocal = settingsRows && settingsRows[0]?.day_map ? settingsRows[0].day_map : null;
+        // Build preview schedule using selected days
+        const dayMap: Record<string, number> = {};
+        // Distribute session types across selected days
+        const sessionTypes = ["easy", "tempo", "interval", "long"];
+        selectedDays.forEach((day, idx) => {
+          const type = sessionTypes[idx % sessionTypes.length] || "easy";
+          dayMap[type] = day;
+        });
+        // Ensure long runs are on weekends if possible
+        if (selectedDays.includes(5) || selectedDays.includes(6)) {
+          dayMap["long"] = selectedDays.includes(5) ? 5 : 6;
         }
-        const start = (startDate || new Date().toISOString().slice(0, 10));
-        const sched = buildSchedule(fullPlan as any, start, dayMapLocal || undefined);
-        setPreviewSchedule(sched);
+        const start = startDate || new Date().toISOString().slice(0, 10);
+        const sched = buildSchedule(fullPlan as any, start, dayMap);
+        // Filter schedule to only show sessions between start and end date
+        const filteredSched = sched.filter((s) => {
+          if (startDate && s.date < startDate) return false;
+          if (endDate && s.date > endDate) return false;
+          return true;
+        });
+        setPreviewSchedule(filteredSched);
       } else {
         setErrorMsg("Kunne ikke læse plan fra svar. Prøv igen.");
       }
@@ -136,25 +159,19 @@ export default function GoalForm({ onFinished }: { onFinished?: () => void }) {
   async function savePreview() {
     if (!previewPlan) return;
     setSaving(true);
-    const { data: userRes } = await supabase.auth.getUser();
-    const userId = userRes.user?.id;
-    if (!userId) {
-      setSaving(false);
-      window.location.href = `/login?next=/plan`;
-      return;
-    }
+    // Use a default user ID for now (no authentication)
+    const userId = "00000000-0000-0000-0000-000000000000";
     // Compose JSON with goal metadata + schedule
-    const distanceKmMap: Record<GoalType, number | null> = { "5k": 5, "10k": 10, half: 21.097, marathon: 42.195, custom: null } as const;
+    const distanceKmMap: Record<GoalType, number | null> = { "5k": 5, "10k": 10, half: 21.097, marathon: 42.195 } as const;
     const dataToSave: any = {
       ...previewPlan,
       goal: {
         ...(previewPlan.goal || {}),
-        race_date: targetDate || null,
         distance_km: distanceKmMap[goalType] ?? null,
         distance_label: goalType,
         units: "metric",
-        target_pace: targetType === "pace" && targetPace ? targetPace : undefined,
         target_time: targetType === "time" && targetTime ? targetTime : undefined,
+        target_pace: targetType === "pace" && targetPace ? targetPace : undefined,
       },
       schedule: previewSchedule || undefined,
     };
@@ -169,16 +186,32 @@ export default function GoalForm({ onFinished }: { onFinished?: () => void }) {
     const target_time_sec = dataToSave.goal?.target_time ? parseTimeToSec(dataToSave.goal.target_time) : null;
     const target_pace_sec = dataToSave.goal?.target_pace ? parseTimeToSec(dataToSave.goal.target_pace) : null;
 
-    const res = await fetch("/api/plans/save", {
+    // Save day_map to settings
+    const dayMap: Record<string, number> = {};
+    const sessionTypes = ["easy", "tempo", "interval", "long"];
+    selectedDays.forEach((day, idx) => {
+      const type = sessionTypes[idx % sessionTypes.length] || "easy";
+      dayMap[type] = day;
+    });
+    if (selectedDays.includes(5) || selectedDays.includes(6)) {
+      dayMap["long"] = selectedDays.includes(5) ? 5 : 6;
+    }
+    await supabase.from("settings").upsert({ user_id: userId, day_map: dayMap });
+
+    // If updating existing plan, use update endpoint, otherwise create new
+    const url = planId ? "/api/plans/update" : "/api/plans/save";
+    const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        plan_id: planId,
         start_date: startDate || new Date().toISOString().slice(0, 10),
+        end_date: endDate || null,
         plan_title: previewPlan.meta.plan_title,
         plan_description: previewPlan.meta.plan_description,
         distance_label: goalType,
         distance_km: distanceKmMap[goalType] ?? null,
-        race_date: targetDate || null,
+        race_date: endDate || null,
         target_time_sec,
         target_pace_sec,
         data: dataToSave,
@@ -188,7 +221,6 @@ export default function GoalForm({ onFinished }: { onFinished?: () => void }) {
       const j = await res.json().catch(() => ({}));
       setSaving(false);
       setErrorMsg(j?.error || "Kunne ikke gemme plan. Prøv igen.");
-      if (res.status === 401) window.location.href = `/login?next=/plan`;
       return;
     }
     if (typeof window !== "undefined") {
@@ -199,10 +231,10 @@ export default function GoalForm({ onFinished }: { onFinished?: () => void }) {
   }
 
   return (
-    <form onSubmit={createPlan} className="space-y-4">
+    <form onSubmit={createPlan} className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className="text-sm">Mål</span>
+          <span className="text-sm font-medium">Mål</span>
           <select
             value={goalType}
             onChange={(e) => setGoalType(e.target.value as GoalType)}
@@ -212,20 +244,10 @@ export default function GoalForm({ onFinished }: { onFinished?: () => void }) {
             <option value="10k">10 km</option>
             <option value="half">Halvmaraton</option>
             <option value="marathon">Maraton</option>
-            <option value="custom">Tilpasset</option>
           </select>
         </label>
         <label className="block">
-          <span className="text-sm">Måldato</span>
-          <input
-            type="date"
-            value={targetDate}
-            onChange={(e) => setTargetDate(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm">Startdato for plan</span>
+          <span className="text-sm font-medium">Startdato for plan</span>
           <input
             type="date"
             value={startDate}
@@ -234,7 +256,39 @@ export default function GoalForm({ onFinished }: { onFinished?: () => void }) {
           />
         </label>
         <label className="block">
-          <span className="text-sm">Måltype</span>
+          <span className="text-sm font-medium">Slutdato for plan</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
+          />
+        </label>
+        <label className="sm:col-span-2 block">
+          <span className="text-sm font-medium mb-2 block">Hvilke dage skal du løbe?</span>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {weekdays.map((day) => (
+              <label
+                key={day.value}
+                className={`flex items-center gap-2 rounded-lg border p-3 cursor-pointer transition-colors ${
+                  selectedDays.includes(day.value)
+                    ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-black"
+                    : "border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-900"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedDays.includes(day.value)}
+                  onChange={() => toggleDay(day.value)}
+                  className="sr-only"
+                />
+                <span className="text-sm font-medium">{day.label}</span>
+              </label>
+            ))}
+          </div>
+        </label>
+        <label className="block">
+          <span className="text-sm font-medium">Måltype</span>
           <select
             value={targetType}
             onChange={(e) => setTargetType(e.target.value as "time" | "pace")}
@@ -244,9 +298,9 @@ export default function GoalForm({ onFinished }: { onFinished?: () => void }) {
             <option value="pace">Gns. pace</option>
           </select>
         </label>
-        {targetType === "time" ? (
+        {targetType === "time" && (
           <label className="block">
-            <span className="text-sm">Måltid (hh:mm:ss)</span>
+            <span className="text-sm font-medium">Måltid (hh:mm:ss)</span>
             <input
               type="text"
               placeholder="00:25:00"
@@ -255,9 +309,10 @@ export default function GoalForm({ onFinished }: { onFinished?: () => void }) {
               className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
             />
           </label>
-        ) : (
+        )}
+        {targetType === "pace" && (
           <label className="block">
-            <span className="text-sm">Gns. pace (mm:ss pr. km)</span>
+            <span className="text-sm font-medium">Gennemsnitlig pace (mm:ss pr. km)</span>
             <input
               type="text"
               placeholder="05:00"
@@ -267,173 +322,43 @@ export default function GoalForm({ onFinished }: { onFinished?: () => void }) {
             />
           </label>
         )}
-        <label className="block">
-          <span className="text-sm">Dage pr. uge</span>
-          <input
-            type="number"
-            min={2}
-            max={7}
-            value={weeklyDays}
-            onChange={(e) => setWeeklyDays(parseInt(e.target.value || "0"))}
-            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm">Tid pr. uge (min)</span>
-          <input
-            type="number"
-            min={30}
-            max={1200}
-            value={weeklyTimeMin as number}
-            onChange={(e) => setWeeklyTimeMin(parseInt(e.target.value || "0"))}
-            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm">Seneste snit (km/uge)</span>
-          <input
-            type="number"
-            min={0}
-            max={300}
-            value={historyAvgKm as number}
-            onChange={(e) => setHistoryAvgKm(parseInt(e.target.value || "0"))}
-            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm">Uger (4–8)</span>
-          <input
-            type="number"
-            min={4}
-            max={8}
-            value={historyWeeks as number}
-            onChange={(e) => setHistoryWeeks(parseInt(e.target.value || "0"))}
-            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm">PR 5 km (hh:mm:ss)</span>
-          <input
-            type="text"
-            placeholder="00:25:00"
-            value={pr5k}
-            onChange={(e) => setPr5k(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm">PR 10 km (hh:mm:ss)</span>
-          <input
-            type="text"
-            placeholder="00:52:00"
-            value={pr10k}
-            onChange={(e) => setPr10k(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm">PR Halvmaraton</span>
-          <input
-            type="text"
-            placeholder="01:55:00"
-            value={prHalf}
-            onChange={(e) => setPrHalf(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm">PR Maraton</span>
-          <input
-            type="text"
-            placeholder="04:00:00"
-            value={prMarathon}
-            onChange={(e) => setPrMarathon(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="sm:col-span-2 block">
-          <span className="text-sm">Skadehistorik</span>
-          <textarea
-            rows={3}
-            value={injuries}
-            onChange={(e) => setInjuries(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="sm:col-span-2 block">
-          <span className="text-sm">Præferencer (terræn, langtur dag, osv.)</span>
-          <textarea
-            rows={3}
-            value={preferences}
-            onChange={(e) => setPreferences(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
-          />
-        </label>
-        <label className="block">
-          <span className="text-sm">Enheder</span>
-          <select
-            value={units}
-            onChange={(e) => setUnits(e.target.value as "metric")}
-            className="mt-1 w-full rounded-lg border border-zinc-300 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900"
-          >
-            <option value="metric">km / min/km</option>
-          </select>
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={useData} onChange={(e) => setUseData(e.target.checked)} />
-          <span className="text-sm">Brug min Strava data (hvis tilgængelig)</span>
-        </label>
       </div>
       {errorMsg && (
-        <div className="rounded-md border border-red-300 bg-red-50 p-2 text-sm text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-200">
+        <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-200">
           {errorMsg}
         </div>
       )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex w-full items-center gap-3">
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex-1 rounded-lg bg-zinc-900 p-3 text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-black"
-          >
-            {loading ? "Beregner..." : (previewPlan ? "Regenerer" : "Generér plan")}
-          </button>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full rounded-lg bg-zinc-900 p-3 text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-black sm:w-auto"
+        >
+          {loading ? "Genererer plan..." : previewPlan ? "Regenerer plan" : "Generer plan"}
+        </button>
+        {previewPlan && (
           <button
             type="button"
-            onClick={async () => {
-              // Local quick preview using planEngine (no OpenAI)
-              try {
-                setLoading(true);
-                const { generatePlan } = await import("@/lib/planEngine");
-                const distance_km = ({ "5k": 5, "10k": 10, half: 21.097, marathon: 42.195 } as any)[goalType] || 5;
-                const local = generatePlan({ startDate, raceDate: targetDate || startDate, distance_km, weeklyDays });
-                const fullPlan = { weeks: local.weeks, notes: local.meta?.notes || "", meta: { plan_title: "Forhåndsvisning (lokal)", plan_description: "Lokal genereret plan – kan gemmes eller regenereres." } } as any;
-                setPreviewPlan(fullPlan);
-                const sched = buildSchedule(fullPlan as any, startDate, undefined);
-                setPreviewSchedule(sched);
-              } finally {
-                setLoading(false);
-              }
-            }}
-            className="rounded-lg border border-zinc-300 p-3 text-sm dark:border-zinc-700"
+            disabled={saving}
+            onClick={savePreview}
+            className="w-full rounded-lg bg-zinc-900 p-3 text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-black sm:w-auto"
           >
-            Hurtig forhåndsvisning (lokal)
+            {saving ? "Gemmer..." : "Gem og gå til planoversigt"}
           </button>
-        </div>
-        <button
-          type="button"
-          disabled={!previewPlan || saving}
-          onClick={savePreview}
-          className="w-full rounded-lg border border-zinc-300 p-3 disabled:opacity-60 dark:border-zinc-700 sm:w-auto"
-        >
-          {saving ? "Gemmer..." : "Gem og vis plan"}
-        </button>
+        )}
       </div>
 
       {previewPlan && (
-        <div className="space-y-3">
-          <div className="text-base font-semibold">Forhåndsvisning: kalender</div>
+        <div className="space-y-4 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+          <div className="text-base font-semibold">Din genererede plan</div>
+          <div className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
+            {previewPlan.meta?.plan_description || "Planen er genereret og klar til brug."}
+          </div>
+          <div className="text-sm font-medium mb-2">Kalenderoversigt</div>
           <MonthCalendar schedule={previewSchedule || []} onMove={() => {}} />
+          <div className="pt-2 text-xs text-zinc-600 dark:text-zinc-400">
+            Efter du har gemt planen, kan du se den fulde oversigt på planoversigten.
+          </div>
         </div>
       )}
     </form>

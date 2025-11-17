@@ -70,12 +70,10 @@ export async function activatePlan(formData: FormData) {
   const planId = formData.get("planId") as string;
   if (!planId) throw new Error("missing planId");
 
-  // Identify user
-  const { data: userRes } = await supabase.auth.getUser();
-  const userId = userRes.user?.id;
-  if (!userId) throw new Error("not_authenticated");
+  // Use default user ID (no authentication)
+  const userId = "00000000-0000-0000-0000-000000000000";
 
-  // Deactivate others, activate chosen
+  // Deactivate all plans for this user, then activate the chosen one
   const { error: e1 } = await supabase.from("plans").update({ is_active: false }).eq("user_id", userId);
   if (e1) throw e1;
   const { error: e2 } = await supabase.from("plans").update({ is_active: true, active_at: new Date().toISOString() }).eq("id", planId).eq("user_id", userId);

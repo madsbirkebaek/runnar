@@ -90,8 +90,9 @@ create index if not exists idx_user_races_user on public.user_races(user_id);
 -- Plans stored per user
 create table if not exists public.plans (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete cascade,
+  user_id uuid, -- No foreign key constraint since we're not using authentication
   start_date date,
+  end_date date,
   -- denormalized summary columns for fast reads
   plan_title text,
   plan_description text,
@@ -107,14 +108,17 @@ create table if not exists public.plans (
 alter table public.plans enable row level security;
 
 drop policy if exists "users manage own plans" on public.plans;
-create policy "users manage own plans" on public.plans
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "allow all plans" on public.plans;
+-- Allow all operations since we're not using authentication
+create policy "allow all plans" on public.plans
+  for all using (true) with check (true);
 
 create index if not exists idx_plans_user on public.plans(user_id);
 create index if not exists idx_plans_created on public.plans(created_at);
 create index if not exists idx_plans_race_date on public.plans(race_date);
 
 -- Add columns if missing (safe to re-run)
+alter table public.plans add column if not exists end_date date;
 alter table public.plans add column if not exists plan_title text;
 alter table public.plans add column if not exists plan_description text;
 alter table public.plans add column if not exists distance_label text;
@@ -170,7 +174,7 @@ where target_pace_sec is null;
 
 -- Settings per user
 create table if not exists public.settings (
-  user_id uuid primary key references auth.users(id) on delete cascade,
+  user_id uuid primary key, -- No foreign key constraint since we're not using authentication
   units text default 'metric',
   weekly_days int,
   weekly_time_min int,
@@ -184,8 +188,10 @@ create table if not exists public.settings (
 alter table public.settings enable row level security;
 
 drop policy if exists "users manage own settings" on public.settings;
-create policy "users manage own settings" on public.settings
-  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "allow all settings" on public.settings;
+-- Allow all operations since we're not using authentication
+create policy "allow all settings" on public.settings
+  for all using (true) with check (true);
 
 create index if not exists idx_settings_user on public.settings(user_id);
 
