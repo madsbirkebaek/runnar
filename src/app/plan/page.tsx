@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import MonthCalendar from "@/components/MonthCalendar";
 import { buildSchedule, ScheduledSession } from "@/lib/schedule";
+import SessionDetailModal from "@/components/SessionDetailModal";
 
 type GoalType = "5k" | "10k" | "half" | "marathon";
 
@@ -27,6 +28,8 @@ export default function PlanPage() {
   const [dayMap, setDayMap] = useState<Record<string, number> | null>(null);
   const [editing, setEditing] = useState(false);
   const [currentPlanId, setCurrentPlanId] = useState<string | null>(null);
+  const [sessionLinks, setSessionLinks] = useState<Map<string, { activity_id: number; match_score: number; id: string }>>(new Map());
+  const [selectedSession, setSelectedSession] = useState<ScheduledSession | null>(null);
 
   function prettyDistance(label?: string | null, km?: number | null) {
     switch (label) {
@@ -115,6 +118,27 @@ export default function PlanPage() {
           return true;
         });
         setSchedule(filteredSched);
+        
+        // Load session links
+        if (row.id) {
+          const { data: links } = await supabase
+            .from("session_activity_links")
+            .select("*")
+            .eq("plan_id", row.id);
+          
+          if (links) {
+            const linksMap = new Map<string, { activity_id: number; match_score: number; id: string }>();
+            for (const link of links) {
+              const key = `${link.session_date}-${link.session_type}`;
+              linksMap.set(key, {
+                activity_id: link.activity_id,
+                match_score: link.match_score,
+                id: link.id,
+              });
+            }
+            setSessionLinks(linksMap);
+          }
+        }
       }
     }
     load();
@@ -123,6 +147,27 @@ export default function PlanPage() {
     window.addEventListener("plan:updated", handler);
     return () => window.removeEventListener("plan:updated", handler);
   }, []);
+
+  async function reloadLinks() {
+    if (!currentPlanId) return;
+    const { data: links } = await supabase
+      .from("session_activity_links")
+      .select("*")
+      .eq("plan_id", currentPlanId);
+    
+    if (links) {
+      const linksMap = new Map<string, { activity_id: number; match_score: number; id: string }>();
+      for (const link of links) {
+        const key = `${link.session_date}-${link.session_type}`;
+        linksMap.set(key, {
+          activity_id: link.activity_id,
+          match_score: link.match_score,
+          id: link.id,
+        });
+      }
+      setSessionLinks(linksMap);
+    }
+  }
 
 
   async function moveSession(sess: ScheduledSession, toDate: string) {
@@ -279,10 +324,30 @@ export default function PlanPage() {
                 <div className="rounded-lg border border-zinc-200 p-6 dark:border-zinc-800">
                   <div className="mb-4">
                     <h2 className="text-lg font-semibold mb-1">Kalender</h2>
-                    <p className="text-sm text-zinc-600 dark:text-zinc-400">Træk pas for at flytte dem til andre dage</p>
+                    <p className="text-sm text-zinc-600 dark:text-zinc-400">Træk pas for at flytte dem til andre dage. Klik for at se detaljer.</p>
                   </div>
-                  <MonthCalendar schedule={schedule} onMove={moveSession} endDate={endDate || planSummary?.race_date || null} />
+                  <MonthCalendar
+                    schedule={schedule}
+                    onMove={moveSession}
+                    endDate={endDate || planSummary?.race_date || null}
+                    sessionLinks={sessionLinks}
+                    onSessionClick={(session) => setSelectedSession(session)}
+                  />
                 </div>
+                
+                {selectedSession && currentPlanId && (
+                  <SessionDetailModal
+                    session={selectedSession}
+                    planId={currentPlanId}
+                    link={(() => {
+                      const key = `${selectedSession.date}-${selectedSession.type}`;
+                      const link = sessionLinks.get(key);
+                      return link ? { id: link.id, activity_id: link.activity_id, match_score: link.match_score } : null;
+                    })()}
+                    onClose={() => setSelectedSession(null)}
+                    onLinkChange={reloadLinks}
+                  />
+                )}
               </div>
             )}
 

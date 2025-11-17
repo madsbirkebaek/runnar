@@ -154,6 +154,7 @@ set target_time_sec = coalesce(
         else null
       end
     )
+  end
 )
 where target_time_sec is null;
 
@@ -169,6 +170,7 @@ set target_pace_sec = coalesce(
         else null
       end
     )
+  end
 )
 where target_pace_sec is null;
 
@@ -231,5 +233,74 @@ alter table public.service_tokens enable row level security;
 -- Deny all to anon/authenticated; service role bypasses RLS
 drop policy if exists "deny all service_tokens" on public.service_tokens;
 create policy "deny all service_tokens" on public.service_tokens for all using (false) with check (false);
+
+-- Activities from Strava (cached for matching)
+create table if not exists public.activities (
+  id bigint primary key, -- Strava activity ID
+  user_id uuid, -- No foreign key constraint since we're not using authentication
+  name text,
+  date date not null, -- Activity date (YYYY-MM-DD)
+  distance_km numeric,
+  duration_min numeric,
+  pace_min_per_km numeric,
+  type text, -- workout_type or sport_type
+  -- Detailed metrics
+  average_heartrate numeric, -- bpm
+  max_heartrate numeric, -- bpm
+  average_speed_ms numeric, -- m/s
+  max_speed_ms numeric, -- m/s
+  elevation_gain numeric, -- meters
+  calories integer,
+  total_elevation_gain numeric, -- meters (alternative field name)
+  strava_data jsonb, -- Full Strava response for future use
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table public.activities enable row level security;
+
+drop policy if exists "allow all activities" on public.activities;
+create policy "allow all activities" on public.activities
+  for all using (true) with check (true);
+
+create index if not exists idx_activities_user on public.activities(user_id);
+create index if not exists idx_activities_date on public.activities(date);
+create index if not exists idx_activities_user_date on public.activities(user_id, date);
+
+-- Add new columns if they don't exist (safe migration)
+alter table public.activities add column if not exists average_heartrate numeric;
+alter table public.activities add column if not exists max_heartrate numeric;
+alter table public.activities add column if not exists average_speed_ms numeric;
+alter table public.activities add column if not exists max_speed_ms numeric;
+alter table public.activities add column if not exists elevation_gain numeric;
+alter table public.activities add column if not exists calories integer;
+alter table public.activities add column if not exists total_elevation_gain numeric;
+
+drop trigger if exists trg_activities_updated on public.activities;
+create trigger trg_activities_updated before update on public.activities
+for each row execute function public.set_updated_at();
+
+-- Links between plan sessions and activities
+create table if not exists public.session_activity_links (
+  id uuid primary key default gen_random_uuid(),
+  plan_id uuid not null references public.plans(id) on delete cascade,
+  session_date date not null, -- Date of the planned session
+  session_type text not null, -- Type of session (easy, tempo, etc.)
+  activity_id bigint not null references public.activities(id) on delete cascade,
+  match_score numeric not null check (match_score >= 0 and match_score <= 100),
+  created_at timestamptz default now(),
+  unique(plan_id, session_date, session_type), -- One link per session
+  unique(activity_id) -- One link per activity (v1 constraint)
+);
+
+alter table public.session_activity_links enable row level security;
+
+drop policy if exists "allow all session_activity_links" on public.session_activity_links;
+create policy "allow all session_activity_links" on public.session_activity_links
+  for all using (true) with check (true);
+
+create index if not exists idx_links_plan on public.session_activity_links(plan_id);
+create index if not exists idx_links_activity on public.session_activity_links(activity_id);
+create index if not exists idx_links_plan_date on public.session_activity_links(plan_id, session_date);
 
 

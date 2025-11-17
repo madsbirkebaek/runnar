@@ -22,10 +22,14 @@ export default function MonthCalendar({
   schedule,
   onMove,
   endDate,
+  sessionLinks,
+  onSessionClick,
 }: {
   schedule: ScheduledSession[];
   onMove: (session: ScheduledSession, toISODate: string) => void;
   endDate?: string | null;
+  sessionLinks?: Map<string, { activity_id: number; match_score: number }>; // Map from "date-type" to link
+  onSessionClick?: (session: ScheduledSession) => void;
 }) {
   const router = useRouter();
   const [cursor, setCursor] = useState<Date>(new Date());
@@ -54,8 +58,12 @@ export default function MonthCalendar({
       }
     }
     
-    // It was a click, navigate to session detail
-    router.push(`/session?date=${session.date}`);
+    // It was a click, call onSessionClick if provided, otherwise navigate
+    if (onSessionClick) {
+      onSessionClick(session);
+    } else {
+      router.push(`/session?date=${session.date}`);
+    }
     
     // Reset drag state
     setDragStartPos(null);
@@ -145,42 +153,56 @@ export default function MonthCalendar({
                   <span className="text-[10px] text-green-600 dark:text-green-400 font-medium">🏁 Løb</span>
                 )}
               </div>
-              {sess && (
-                <div
-                  draggable
-                  onMouseDown={handleMouseDown}
-                  onDragStart={(e) => {
-                    e.dataTransfer.setData('application/json', JSON.stringify(sess));
-                    handleDragStart(e);
-                  }}
-                  onDragEnd={handleDragEnd}
-                  onClick={(e) => handleSessionClick(sess, e)}
-                  className="mt-1 rounded bg-zinc-900 px-2 py-1 text-xs text-white dark:bg-zinc-100 dark:text-black cursor-pointer hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-colors select-none"
-                  title="Klik for at se detaljer eller træk for at flytte"
-                >
-                  <div className="font-medium">{sess.title || sess.type}</div>
-                  {/* Show distance and pace for running activities */}
-                  {(sess.type === "easy" || sess.type === "tempo" || sess.type === "long" || sess.type === "recovery" || sess.type === "hill") && (
-                    <div className="mt-0.5 text-[10px] opacity-90">
-                      {typeof sess.distance_km === "number" && (
-                        <span>{sess.distance_km} km</span>
-                      )}
-                      {typeof sess.distance_km === "number" && sess.pace_min_per_km && (
-                        <span> • </span>
-                      )}
-                      {sess.pace_min_per_km && (
-                        <span>{sess.pace_min_per_km} min/km</span>
+              {sess && (() => {
+                const linkKey = `${sess.date}-${sess.type}`;
+                const link = sessionLinks?.get(linkKey);
+                const isCompleted = !!link;
+                return (
+                  <div
+                    draggable
+                    onMouseDown={handleMouseDown}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('application/json', JSON.stringify(sess));
+                      handleDragStart(e);
+                    }}
+                    onDragEnd={handleDragEnd}
+                    onClick={(e) => handleSessionClick(sess, e)}
+                    className={`mt-1 rounded px-2 py-1 text-xs cursor-pointer hover:opacity-90 transition-colors select-none ${
+                      isCompleted
+                        ? 'bg-green-600 text-white dark:bg-green-500'
+                        : 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-black hover:bg-zinc-800 dark:hover:bg-zinc-200'
+                    }`}
+                    title="Klik for at se detaljer eller træk for at flytte"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="font-medium">{sess.title || sess.type}</div>
+                      {isCompleted && (
+                        <span className="text-[10px]">✓</span>
                       )}
                     </div>
-                  )}
-                  {/* Show duration for interval training */}
-                  {sess.type === "interval" && typeof sess.duration_min === "number" && (
-                    <div className="mt-0.5 text-[10px] opacity-90">
-                      {sess.duration_min} min
-                    </div>
-                  )}
-                </div>
-              )}
+                    {/* Show distance and pace for running activities */}
+                    {(sess.type === "easy" || sess.type === "tempo" || sess.type === "long" || sess.type === "recovery" || sess.type === "hill") && (
+                      <div className="mt-0.5 text-[10px] opacity-90">
+                        {typeof sess.distance_km === "number" && (
+                          <span>{sess.distance_km} km</span>
+                        )}
+                        {typeof sess.distance_km === "number" && sess.pace_min_per_km && (
+                          <span> • </span>
+                        )}
+                        {sess.pace_min_per_km && (
+                          <span>{sess.pace_min_per_km} min/km</span>
+                        )}
+                      </div>
+                    )}
+                    {/* Show duration for interval training */}
+                    {sess.type === "interval" && typeof sess.duration_min === "number" && (
+                      <div className="mt-0.5 text-[10px] opacity-90">
+                        {sess.duration_min} min
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })}

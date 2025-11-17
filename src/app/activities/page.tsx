@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import NavTabs from "@/components/NavTabs";
+import { supabase } from "@/lib/supabaseClient";
+import ActivityDetailModal from "@/components/ActivityDetailModal";
 
 type Run = {
   id: number;
@@ -11,6 +13,10 @@ type Run = {
   duration_min: number;
   pace_min_per_km: number | null;
   type: string | number | null;
+  average_heartrate?: number | null;
+  max_heartrate?: number | null;
+  elevation_gain?: number | null;
+  calories?: number | null;
 };
 
 type Week = {
@@ -65,17 +71,42 @@ export default function ActivitiesPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [weeks, setWeeks] = useState<Week[]>([]);
+  const [activityLinks, setActivityLinks] = useState<Map<number, { id: string; plan_id: string; session_date: string; session_type: string; match_score: number }>>(new Map());
+  const [selectedActivity, setSelectedActivity] = useState<Run | null>(null);
 
   useEffect(() => {
-    setLoading(true);
-    fetch("/api/strava/activities")
-      .then(async (r) => {
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(`${j?.error || "error"}${j?.details ? `: ${j.details}` : ""} [${r.status}]`);
+    async function load() {
+      setLoading(true);
+      try {
+        const [activitiesRes, linksRes] = await Promise.all([
+          fetch("/api/strava/activities"),
+          supabase.from("session_activity_links").select("*"),
+        ]);
+
+        const j = await activitiesRes.json().catch(() => ({}));
+        if (!activitiesRes.ok) throw new Error(`${j?.error || "error"}${j?.details ? `: ${j.details}` : ""} [${activitiesRes.status}]`);
         setWeeks(j.weeks || []);
-      })
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+
+        if (linksRes.data) {
+          const linksMap = new Map();
+          for (const link of linksRes.data) {
+            linksMap.set(link.activity_id, {
+              id: link.id,
+              plan_id: link.plan_id,
+              session_date: link.session_date,
+              session_type: link.session_type,
+              match_score: link.match_score,
+            });
+          }
+          setActivityLinks(linksMap);
+        }
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
   }, []);
 
   return (
@@ -94,18 +125,31 @@ export default function ActivitiesPage() {
                 </div>
 
                 <div className="divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
-                  {w.runs?.map((r) => (
-                    <div key={r.id} className="flex items-center justify-between py-2">
-                      <div>
-                        <div className="font-medium">{r.name || "Run"}</div>
-                        <div className="text-xs text-zinc-600 dark:text-zinc-400">{r.date.slice(0, 10)} • {typeLabel(r.type)}</div>
+                  {w.runs?.map((r) => {
+                    const link = activityLinks.get(r.id);
+                    const isLinked = !!link;
+                    return (
+                      <div
+                        key={r.id}
+                        onClick={() => setSelectedActivity(r)}
+                        className={`flex items-center justify-between py-2 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900/50 ${
+                          isLinked ? "bg-green-50/50 dark:bg-green-950/20" : ""
+                        }`}
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <div className="font-medium">{r.name || "Run"}</div>
+                            {isLinked && <span className="text-xs text-green-600 dark:text-green-400">✓</span>}
+                          </div>
+                          <div className="text-xs text-zinc-600 dark:text-zinc-400">{r.date.slice(0, 10)} • {typeLabel(r.type)}</div>
+                        </div>
+                        <div className="text-right">
+                          <div>{r.distance_km} km</div>
+                          <div className="text-xs text-zinc-600 dark:text-zinc-400">{formatPace(r.pace_min_per_km)}</div>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <div>{r.distance_km} km</div>
-                        <div className="text-xs text-zinc-600 dark:text-zinc-400">{formatPace(r.pace_min_per_km)}</div>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {!w.runs?.length && (
                     <div className="py-2 text-xs text-zinc-600 dark:text-zinc-400">Ingen løb registreret</div>
                   )}
@@ -113,6 +157,67 @@ export default function ActivitiesPage() {
               </div>
             ))}
           </div>
+        )}
+        
+        {selectedActivity && (
+          <ActivityDetailModal
+            activity={{
+              id: selectedActivity.id,
+              name: selectedActivity.name,
+              date: selectedActivity.date.slice(0, 10),
+              distance_km: selectedActivity.distance_km,
+              duration_min: selectedActivity.duration_min,
+              pace_min_per_km: selectedActivity.pace_min_per_km,
+              average_heartrate: selectedActivity.average_heartrate,
+              max_heartrate: selectedActivity.max_heartrate,
+              elevation_gain: selectedActivity.elevation_gain,
+              calories: selectedActivity.calories,
+            }}
+            link={activityLinks.get(selectedActivity.id) || null}
+            onClose={() => {
+              setSelectedActivity(null);
+              // Reload links
+              supabase
+                .from("session_activity_links")
+                .select("*")
+                .then(({ data }) => {
+                  if (data) {
+                    const linksMap = new Map();
+                    for (const link of data) {
+                      linksMap.set(link.activity_id, {
+                        id: link.id,
+                        plan_id: link.plan_id,
+                        session_date: link.session_date,
+                        session_type: link.session_type,
+                        match_score: link.match_score,
+                      });
+                    }
+                    setActivityLinks(linksMap);
+                  }
+                });
+            }}
+            onLinkChange={() => {
+              // Reload links
+              supabase
+                .from("session_activity_links")
+                .select("*")
+                .then(({ data }) => {
+                  if (data) {
+                    const linksMap = new Map();
+                    for (const link of data) {
+                      linksMap.set(link.activity_id, {
+                        id: link.id,
+                        plan_id: link.plan_id,
+                        session_date: link.session_date,
+                        session_type: link.session_type,
+                        match_score: link.match_score,
+                      });
+                    }
+                    setActivityLinks(linksMap);
+                  }
+                });
+            }}
+          />
         )}
       </main>
     </div>
