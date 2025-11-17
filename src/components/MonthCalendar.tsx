@@ -182,6 +182,8 @@ export default function MonthCalendar({
                     className={`mt-1 rounded px-2 py-1 text-xs cursor-pointer hover:opacity-90 transition-colors select-none ${
                       isCompleted
                         ? 'bg-green-600 text-white dark:bg-green-500'
+                        : sess.type === "race"
+                        ? 'bg-red-600 text-white dark:bg-red-500 hover:bg-red-700 dark:hover:bg-red-600'
                         : 'bg-zinc-900 text-white dark:bg-zinc-100 dark:text-black hover:bg-zinc-800 dark:hover:bg-zinc-200'
                     }`}
                     title="Klik for at se detaljer eller træk for at flytte"

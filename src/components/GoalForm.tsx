@@ -139,7 +139,7 @@ export default function GoalForm({ onFinished, existingPlan }: GoalFormProps) {
           dayMap["long"] = selectedDays.includes(5) ? 5 : 6;
         }
         const start = startDate || new Date().toISOString().slice(0, 10);
-        const sched = buildSchedule(fullPlan as any, start, dayMap);
+        const sched = buildSchedule(fullPlan as any, start, dayMap, endDate || null);
         // Filter schedule to only show sessions between start and end date
         const filteredSched = sched.filter((s) => {
           if (startDate && s.date < startDate) return false;

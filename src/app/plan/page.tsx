@@ -107,7 +107,8 @@ export default function PlanPage() {
           sched = row.data.schedule;
         } else {
           // Build schedule from weeks (initial generation)
-          sched = buildSchedule(row.data, row.start_date, settingsRows?.[0]?.day_map || undefined);
+          const endDate = row.end_date || row.race_date || null;
+          sched = buildSchedule(row.data, row.start_date, settingsRows?.[0]?.day_map || undefined, endDate);
         }
         
         // Filter schedule to only show sessions between start and end date

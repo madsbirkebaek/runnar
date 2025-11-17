@@ -1,6 +1,6 @@
 "use client";
 
-type SessionType = "easy" | "tempo" | "interval" | "long" | "recovery" | "hill" | "other";
+type SessionType = "easy" | "tempo" | "interval" | "long" | "recovery" | "hill" | "race" | "other";
 
 export type PlanSession = {
   type: SessionType;
@@ -33,6 +33,8 @@ export default function PlanView({ weeks, notes }: { weeks: PlanWeek[]; notes?: 
         return "bg-lime-600";
       case "hill":
         return "bg-amber-700";
+      case "race":
+        return "bg-red-600";
       default:
         return "bg-zinc-600";
     }

@@ -11,7 +11,7 @@ export type ScheduledSession = {
 // Very simple mapping: assign sessions to Mon/Tue/Thu/Sat within each week starting from startDate (Monday aligned)
 export type DayMap = { [key: string]: number }; // type -> weekday (0=Mon..6=Sun)
 
-export function buildSchedule(plan: any, startDateISO: string, dayMap?: DayMap): ScheduledSession[] {
+export function buildSchedule(plan: any, startDateISO: string, dayMap?: DayMap, endDateISO?: string | null): ScheduledSession[] {
   if (!plan?.weeks?.length) return [];
   const start = new Date(startDateISO + "T00:00:00Z");
   const monday = alignToMonday(start);
@@ -42,6 +42,29 @@ export function buildSchedule(plan: any, startDateISO: string, dayMap?: DayMap):
       });
     }
   }
+
+  // Add race day session if endDate is provided
+  if (endDateISO) {
+    const raceDate = endDateISO.slice(0, 10); // Ensure YYYY-MM-DD format
+    // Check if there's already a session on race day, if so, replace it
+    const existingIndex = schedule.findIndex(s => s.date === raceDate);
+    const raceDaySession: ScheduledSession = {
+      date: raceDate,
+      type: "race",
+      title: "Race Day",
+      description: "Race day! Dette er dagen du har trænet til. Giv den gas og nyd oplevelsen!",
+    };
+    
+    if (existingIndex >= 0) {
+      schedule[existingIndex] = raceDaySession;
+    } else {
+      schedule.push(raceDaySession);
+    }
+    
+    // Sort schedule by date to ensure race day is in correct position
+    schedule.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
   return schedule;
 }
 

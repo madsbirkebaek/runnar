@@ -65,7 +65,8 @@ export default function TodayPage() {
           const row = planRows[0];
           setPlanNotes((row.data as any)?.notes || null);
           const dm = settingsRows?.[0]?.day_map;
-          const sched = (row.data as any).schedule || buildSchedule(row.data as any, row.start_date, dm);
+          const endDate = row.end_date || row.race_date || null;
+          const sched = (row.data as any).schedule || buildSchedule(row.data as any, row.start_date, dm, endDate);
           setSchedule(sched);
 
           // Calculate week progress
@@ -134,6 +135,7 @@ export default function TodayPage() {
       long: "Long",
       recovery: "Recovery",
       hill: "Hill",
+      race: "Race Day",
       styrke: "Styrke",
       mobilitet: "Mobilitet",
       other: "Andet",
@@ -343,6 +345,8 @@ function iconForType(t: string) {
       return "🟡";
     case "hill":
       return "🟤";
+    case "race":
+      return "🏁";
     case "styrke":
       return "💪";
     case "mobilitet":
