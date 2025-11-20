@@ -10,8 +10,13 @@ export default function PlansSidebar() {
 
   useEffect(() => {
     async function load() {
-      // Use default user ID (no authentication)
-      const userId = "00000000-0000-0000-0000-000000000000";
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      const userId = user.id;
       const { data } = await supabase
         .from("plans")
         .select("id, plan_title, distance_label, race_date, end_date, is_active, created_at")
@@ -41,7 +46,9 @@ export default function PlansSidebar() {
     formData.append("planId", planId);
     await activatePlan(formData);
     // Reload plans
-    const userId = "00000000-0000-0000-0000-000000000000";
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const userId = user.id;
     const { data } = await supabase
       .from("plans")
       .select("id, plan_title, distance_label, race_date, end_date, is_active, created_at")
@@ -56,7 +63,9 @@ export default function PlansSidebar() {
     e.stopPropagation();
     if (!confirm("Er du sikker på, at du vil slette denne plan?")) return;
     
-    const userId = "00000000-0000-0000-0000-000000000000";
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const userId = user.id;
     const { error } = await supabase
       .from("plans")
       .delete()

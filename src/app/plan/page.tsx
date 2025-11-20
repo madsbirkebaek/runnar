@@ -4,6 +4,7 @@ import NavTabs from "@/components/NavTabs";
 import GoalForm from "@/components/GoalForm";
 import PlansSidebar from "./PlansSidebar";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import MonthCalendar from "@/components/MonthCalendar";
 import { buildSchedule, ScheduledSession } from "@/lib/schedule";
@@ -12,6 +13,7 @@ import SessionDetailModal from "@/components/SessionDetailModal";
 type GoalType = "5k" | "10k" | "half" | "marathon";
 
 export default function PlanPage() {
+  const router = useRouter();
   const [planData, setPlanData] = useState<any>(null); // full JSON plan
   const [planSummary, setPlanSummary] = useState<{
     title?: string | null;
@@ -56,8 +58,13 @@ export default function PlanPage() {
 
   useEffect(() => {
     async function load() {
-      // Use default user ID for now (no authentication)
-      const userId = "00000000-0000-0000-0000-000000000000";
+      // Get authenticated user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push("/login?next=/plan");
+        return;
+      }
+      const userId = user.id;
       const [{ data: activePlanRows }, { data: latestPlanRows }, { data: settingsRows }, { data: allPlans }] = await Promise.all([
         supabase
           .from("plans")
@@ -200,8 +207,13 @@ export default function PlanPage() {
     // Update state immediately for responsive UI
     setSchedule(filtered);
     
-    // Use default user ID for now (no authentication)
-    const userId = "00000000-0000-0000-0000-000000000000";
+    // Get authenticated user
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      router.push("/login?next=/plan");
+      return;
+    }
+    const userId = user.id;
     
     // Save schedule back into the active plan
     const { data: row } = await supabase

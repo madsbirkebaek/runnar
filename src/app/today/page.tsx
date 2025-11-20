@@ -55,14 +55,14 @@ export default function TodayPage() {
         const [{ data: activePlanRows }, { data: latestPlanRows }, { data: settingsRows }] = await Promise.all([
           supabase
             .from("plans")
-            .select("id,data,start_date")
+            .select("id,data,start_date,end_date,race_date")
             .eq("user_id", userId)
             .eq("is_active", true)
             .order("created_at", { ascending: false })
             .limit(1),
           supabase
             .from("plans")
-            .select("id,data,start_date")
+            .select("id,data,start_date,end_date,race_date")
             .eq("user_id", userId)
             .order("created_at", { ascending: false })
             .limit(1),
