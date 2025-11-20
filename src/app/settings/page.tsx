@@ -66,6 +66,21 @@ export default function SettingsPage() {
         </div>
 
         <div className="space-y-3">
+          <div className="text-base font-semibold">Konto</div>
+          <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+            <button
+              onClick={async () => {
+                await supabase.auth.signOut();
+                router.push("/login");
+              }}
+              className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm text-red-700 hover:bg-red-50 dark:border-red-800 dark:bg-zinc-900 dark:text-red-400 dark:hover:bg-red-950"
+            >
+              Log ud
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-3">
           <div className="text-base font-semibold">Planlægning: foretrukne ugedage</div>
           <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">

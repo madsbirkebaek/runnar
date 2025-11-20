@@ -1,26 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const search = useSearchParams();
   const nextPath = search.get("next") || "/today";
+  const error = search.get("error");
+
+  // Check if user is already logged in
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        router.push(nextPath);
+      }
+    })();
+  }, [nextPath, router]);
+
+  // Show error message if present in URL
+  useEffect(() => {
+    if (error) {
+      setMessage(decodeURIComponent(error));
+    }
+  }, [error]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setMessage(null);
     try {
-
-      const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: `${window.location.origin}${nextPath}` } });
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}`,
+        },
+      });
       if (error) throw error;
-      setMessage("Tjek din e-mail for login link.");
+      setMessage("Vi har sendt dig et login-link. Tjek din mail.");
     } catch (err: any) {
       setMessage(err?.message ?? "Noget gik galt. Prøv igen.");
     } finally {
@@ -46,6 +69,17 @@ export default function LoginPage() {
               placeholder="din@email.dk"
             />
           </label>
+          {message && (
+            <div
+              className={`rounded-lg p-3 text-sm ${
+                message.includes("sendt") || message.includes("Tjek")
+                  ? "bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200"
+                  : "bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200"
+              }`}
+            >
+              {message}
+            </div>
+          )}
           <button
             type="submit"
             disabled={loading}

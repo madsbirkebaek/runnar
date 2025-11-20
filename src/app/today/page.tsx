@@ -36,13 +36,22 @@ export default function TodayPage() {
   const [schedule, setSchedule] = useState<ScheduledSession[]>([]);
   const [weekProgress, setWeekProgress] = useState<WeekProgress | null>(null);
   const [planNotes, setPlanNotes] = useState<string | null>(null);
+  const [currentPlanId, setCurrentPlanId] = useState<string | null>(null);
+  const [showActivityModal, setShowActivityModal] = useState(false);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [loadingActivities, setLoadingActivities] = useState(false);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        // Use default user ID (no authentication)
-        const userId = "00000000-0000-0000-0000-000000000000";
+        // Get authenticated user
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          router.push("/login?next=/today");
+          return;
+        }
+        const userId = user.id;
         const [{ data: activePlanRows }, { data: latestPlanRows }, { data: settingsRows }] = await Promise.all([
           supabase
             .from("plans")
@@ -63,6 +72,7 @@ export default function TodayPage() {
         const planRows = activePlanRows && activePlanRows[0] ? activePlanRows : latestPlanRows;
         if (planRows && planRows[0]) {
           const row = planRows[0];
+          setCurrentPlanId(row.id);
           setPlanNotes((row.data as any)?.notes || null);
           const dm = settingsRows?.[0]?.day_map;
           const endDate = row.end_date || row.race_date || null;
@@ -124,7 +134,14 @@ export default function TodayPage() {
 
   const todaySession = useMemo(() => {
     if (!schedule.length) return null;
-    return schedule.find((s) => s.date === today) || null;
+    // First, try to find today's session
+    const todaySess = schedule.find((s) => s.date === today);
+    if (todaySess) return todaySess;
+    // If no session today, find the next upcoming session
+    const upcomingSessions = schedule
+      .filter((s) => s.date >= today)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return upcomingSessions.length > 0 ? upcomingSessions[0] : null;
   }, [schedule, today]);
 
   const sessionTypeLabel = (type: string): string => {
@@ -209,14 +226,16 @@ export default function TodayPage() {
           </div>
         )}
 
-        {/* Dagens træning */}
+        {/* Dagens træning / Næste træning */}
         <div>
-          <div className="mb-3 text-lg font-semibold">Dagens træning</div>
+          <div className="mb-3 text-lg font-semibold">
+            {todaySession && todaySession.date === today ? "Dagens træning" : "Næste træning"}
+          </div>
           {!todaySession ? (
             <div className="rounded-lg border border-zinc-200 p-6 text-center dark:border-zinc-800">
-              <div className="text-base font-medium mb-2">Ingen planlagt træning i dag</div>
+              <div className="text-base font-medium mb-2">Ingen planlagt træning</div>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
-                Godt klaret! Hvad med en let recovery-run?
+                Der er ingen træninger i din plan.
               </p>
             </div>
           ) : (
@@ -231,6 +250,15 @@ export default function TodayPage() {
                     <span className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                       {sessionTypeLabel(todaySession.type)}
                     </span>
+                    {todaySession.date !== today && (
+                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {new Date(todaySession.date + "T00:00:00").toLocaleDateString("da-DK", {
+                          weekday: "long",
+                          day: "numeric",
+                          month: "long",
+                        })}
+                      </span>
+                    )}
                   </div>
                   {todaySession.title && (
                     <div className="text-lg font-semibold mb-2">{todaySession.title}</div>
@@ -269,6 +297,47 @@ export default function TodayPage() {
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
+              </div>
+              {/* CTAs */}
+              <div className="mt-4 flex gap-3" onClick={(e) => e.stopPropagation()}>
+                <button
+                  onClick={() => {
+                    // Just show info - could expand to show more details
+                    alert("Forbered dig til træningen:\n\n" + (todaySession.description || todaySession.title || "Følg din plan"));
+                  }}
+                  className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800"
+                >
+                  Start løb
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!currentPlanId || !todaySession) return;
+                    setLoadingActivities(true);
+                    setShowActivityModal(true);
+                    try {
+                      // Fetch activities for this date from database
+                      const { data: activitiesData } = await supabase
+                        .from("activities")
+                        .select("*")
+                        .eq("date", todaySession.date)
+                        .order("created_at", { ascending: false });
+                      
+                      if (activitiesData) {
+                        setActivities(activitiesData);
+                      } else {
+                        setActivities([]);
+                      }
+                    } catch (error) {
+                      console.error("Error fetching activities:", error);
+                      setActivities([]);
+                    } finally {
+                      setLoadingActivities(false);
+                    }
+                  }}
+                  className="flex-1 rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-black dark:hover:bg-zinc-200"
+                >
+                  Markér som gennemført
+                </button>
               </div>
             </div>
           )}
@@ -324,6 +393,105 @@ export default function TodayPage() {
                 )}
               </div>
             )}
+          </div>
+        )}
+
+        {/* Activity Selection Modal */}
+        {showActivityModal && todaySession && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowActivityModal(false)}>
+            <div className="w-full max-w-md rounded-lg bg-white p-6 dark:bg-zinc-900" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold">Vælg aktivitet fra Strava</h2>
+                <button
+                  onClick={() => setShowActivityModal(false)}
+                  className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
+                >
+                  <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+                Vælg en aktivitet fra {new Date(todaySession.date + "T00:00:00").toLocaleDateString("da-DK", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                })} for at linke til denne session.
+              </p>
+              {loadingActivities ? (
+                <div className="py-8 text-center text-sm text-zinc-600 dark:text-zinc-400">Indlæser aktiviteter...</div>
+              ) : activities.length === 0 ? (
+                <div className="py-8 text-center">
+                  <p className="mb-4 text-sm text-zinc-600 dark:text-zinc-400">
+                    Ingen aktiviteter fundet for denne dag.
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-500">
+                    Aktiviteteter bliver automatisk synkroniseret fra Strava. Du kan linke senere.
+                  </p>
+                </div>
+              ) : (
+                <div className="max-h-96 space-y-2 overflow-y-auto">
+                  {activities.map((activity) => (
+                    <button
+                      key={activity.id}
+                      onClick={async () => {
+                        if (!currentPlanId || !todaySession) return;
+                        try {
+                          // Check if link already exists
+                          const { data: existing } = await supabase
+                            .from("session_activity_links")
+                            .select("id")
+                            .eq("plan_id", currentPlanId)
+                            .eq("session_date", todaySession.date)
+                            .eq("session_type", todaySession.type)
+                            .single();
+
+                          if (existing) {
+                            // Update existing link
+                            await supabase
+                              .from("session_activity_links")
+                              .update({ activity_id: activity.id, match_score: 100 })
+                              .eq("id", existing.id);
+                          } else {
+                            // Create new link
+                            await supabase.from("session_activity_links").insert({
+                              plan_id: currentPlanId,
+                              session_date: todaySession.date,
+                              session_type: todaySession.type,
+                              activity_id: activity.id,
+                              match_score: 100,
+                            });
+                          }
+                          
+                          setShowActivityModal(false);
+                          // Reload page to update progress
+                          window.location.reload();
+                        } catch (error) {
+                          console.error("Error linking activity:", error);
+                          alert("Kunne ikke linke aktivitet. Prøv igen.");
+                        }
+                      }}
+                      className="w-full rounded-lg border border-zinc-200 p-3 text-left hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800"
+                    >
+                      <div className="font-medium">{activity.name || "Løb"}</div>
+                      <div className="mt-1 flex gap-3 text-xs text-zinc-600 dark:text-zinc-400">
+                        {activity.distance_km && <span>{activity.distance_km.toFixed(1)} km</span>}
+                        {activity.duration_min && <span>{Math.round(activity.duration_min)} min</span>}
+                        {activity.pace_min_per_km && (
+                          <span>
+                            {Math.floor(activity.pace_min_per_km)}:
+                            {Math.round((activity.pace_min_per_km % 1) * 60)
+                              .toString()
+                              .padStart(2, "0")}{" "}
+                            /km
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </main>

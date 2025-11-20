@@ -24,7 +24,17 @@ OPENAI_API_KEY=
 
 2) Supabase database og RLS
 - Kør SQL i docs/supabase.sql i Supabase SQL editor (idempotent).
+- Kør SQL i docs/auth-setup.sql for at tilføje email kolonne til profiles tabel.
 - Valgfrit: docs/edge-functions.sql for event queue.
+
+3) Supabase Auth konfiguration
+- I Supabase Dashboard → Authentication → URL Configuration:
+  - Sæt "Site URL" til din app URL (fx http://localhost:3000 for dev)
+  - Tilføj "Redirect URLs": http://localhost:3000/auth/callback (og production URL)
+- I Authentication → Providers:
+  - Aktiver "Email" provider
+  - Sæt "Enable email confirmations" til false (eller true hvis du vil have bekræftelse)
+  - Magic Link er aktiveret som standard
 
 3) Lokalt dev
 
@@ -39,6 +49,8 @@ npm run test
 
 Feature highlights implemented
 
+- Passwordless email login med Supabase (magic link)
+- Automatisk session management og profile oprettelse
 - Plan generator (periodisering, deload, styrke/mobilitet indlagt) via src/lib/planEngine.ts og API POST /api/plans
 - Strava service mode: activities fetched using STRAVA_ACCESS_TOKEN from env (no connect flow). Optional OAuth code retained but disabled.
 - Supabase skemaer: tokens, profiles, plans, settings med RLS
